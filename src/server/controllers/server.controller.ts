@@ -147,8 +147,13 @@ export class Server {
     if (business) {
       Cfx.Server.SetEntityCoords(
         Cfx.Server.GetPlayerPed(source.toString()),
-        business.entranceX, business.entranceY, business.entranceZ,
-        true, false, false, true
+        business.entranceX,
+        business.entranceY,
+        business.entranceZ,
+        true,
+        false,
+        false,
+        true
       );
       Cfx.Server.SetEntityRoutingBucket(Cfx.Server.GetPlayerPed(source.toString()), 0);
       this._virtualWorlds.setPlayerVirtualWorld(source, 0);
