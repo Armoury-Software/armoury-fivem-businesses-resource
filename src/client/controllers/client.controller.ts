@@ -10,6 +10,7 @@ import {
   StringFormatter,
   Command,
   UIButton,
+  UIListener,
 } from '@armoury/fivem-framework';
 import { Business } from '@shared/models/business.interface';
 
@@ -99,7 +100,7 @@ export class Client {
     );
   }
 
-  @EventListener({ eventName: 'buttonclick', type: 'ui' })
+  @UIListener({ eventName: 'buttonclick' })
   public onButtonClick({ buttonId }: { buttonId: number }): void {
     switch (buttonId) {
       case 0: {
@@ -109,14 +110,11 @@ export class Client {
     }
   }
 
-  @EventListener({ eventName: 'dialogbuttonclick', type: 'ui' })
+  @UIListener({ eventName: 'dialogbuttonclick' })
   public onDialogButtonClick({ dialogId }: { dialogId: string }): void {
     switch (dialogId) {
       case 'purchase_unowned_business': {
-        Cfx.TriggerServerEvent(
-          `${Cfx.Client.GetCurrentResourceName()}:confirm-purchase-business`,
-          Cfx.Client.GetPlayerServerId(Cfx.Client.PlayerId())
-        );
+        Cfx.TriggerServerEvent(`${Cfx.Client.GetCurrentResourceName()}:confirm-purchase-business`);
         break;
       }
     }

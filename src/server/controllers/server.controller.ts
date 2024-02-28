@@ -1,3 +1,4 @@
+import { Inject } from 'injection-js';
 import {
   Command,
   Controller,
@@ -6,14 +7,17 @@ import {
   ServerEnterableDatabase,
   Export,
   StringFormatter,
+  ServerVirtualWorldsService,
 } from '@armoury/fivem-framework';
 import { BUSINESS_INTERIORS } from '@shared/business-interiors';
 import { Business } from '@shared/models/business.interface';
-import { Inject } from 'injection-js';
 
 @Controller()
 export class Server {
-  public constructor(@Inject('Database') private readonly _database: ServerEnterableDatabase<Business>) {
+  public constructor(
+    @Inject('Database') private readonly _database: ServerEnterableDatabase<Business>,
+    @Inject(ServerVirtualWorldsService) private readonly _virtualWorlds: ServerVirtualWorldsService
+  ) {
     this._database.onSync$.subscribe(this.syncWithClients);
   }
 
@@ -143,15 +147,11 @@ export class Server {
     if (business) {
       Cfx.Server.SetEntityCoords(
         Cfx.Server.GetPlayerPed(source.toString()),
-        business.entranceX,
-        business.entranceY,
-        business.entranceZ,
-        true,
-        false,
-        false,
-        true
+        business.entranceX, business.entranceY, business.entranceZ,
+        true, false, false, true
       );
       Cfx.Server.SetEntityRoutingBucket(Cfx.Server.GetPlayerPed(source.toString()), 0);
+      this._virtualWorlds.setPlayerVirtualWorld(source, 0);
     }
   }
 
@@ -241,34 +241,35 @@ export class Server {
   }
 
   @EventListener({ eventName: `${Cfx.Server.GetCurrentResourceName()}:confirm-purchase-business` })
-  public async onConfirmPurchase(source: number) {
-    const business: Business = this._database.getClosestToPlayer(source);
+  public async onConfirmPurchase() {
+    const player = Cfx.source;
+    const business: Business = this._database.getClosestToPlayer(player);
 
     if (
       (business.owner && business.sellingPrice > 0) ||
       (!business.owner &&
-        business.firstPurchasePrice <= Number(global.exports['authentication'].getPlayerInfo(source, 'cash')))
+        business.firstPurchasePrice <= Number(global.exports['authentication'].getPlayerInfo(player, 'cash')))
     ) {
       const businessPrice: number = !business.owner ? business.firstPurchasePrice : business.sellingPrice;
       const businessPreviousOwner: string = business.owner;
 
-      business.owner = global.exports['authentication'].getPlayerInfo(source, 'name');
+      business.owner = global.exports['authentication'].getPlayerInfo(player, 'name');
       const result: boolean = await this._database.saveAsync(business.id);
 
       if (result) {
         global.exports['authentication'].setPlayerInfo(
-          source,
+          player,
           'cash',
-          Number(global.exports['authentication'].getPlayerInfo(source, 'cash')) - businessPrice,
+          Number(global.exports['authentication'].getPlayerInfo(player, 'cash')) - businessPrice,
           false
         );
-        global.exports['authentication'].setPlayerInfo(source, 'businesskeys', [
-          ...(<number[]>global.exports['authentication'].getPlayerInfo(source, 'businesskeys')),
+        global.exports['authentication'].setPlayerInfo(player, 'businesskeys', [
+          ...(<number[]>global.exports['authentication'].getPlayerInfo(player, 'businesskeys')),
           business.id,
         ]);
 
-        this.teleportIntoBusiness(source, business);
-        Cfx.TriggerClientEvent(`${Cfx.Server.GetCurrentResourceName()}:business-purchased`, source, business);
+        this.teleportIntoBusiness(player, business);
+        Cfx.TriggerClientEvent(`${Cfx.Server.GetCurrentResourceName()}:business-purchased`, player, business);
       } else {
         business.owner = businessPreviousOwner;
       }
@@ -276,24 +277,23 @@ export class Server {
   }
 
   @EventListener({ eventName: `${Cfx.Server.GetCurrentResourceName()}:request-purchase-business` })
-  public onRequestPurchase(source: number) {
-    const business: Business = this._database.getClosestToPlayer(source);
-
+  public onRequestPurchase() {
+    const business: Business = this._database.getClosestToPlayer(Cfx.source);
     if (
       (business.owner && business.sellingPrice > 0) ||
       (!business.owner &&
-        business.firstPurchasePrice <= Number(global.exports['authentication'].getPlayerInfo(source, 'cash')))
+        business.firstPurchasePrice <= Number(global.exports['authentication'].getPlayerInfo(Cfx.source, 'cash')))
     ) {
       const businessPrice: number = !business.owner ? business.firstPurchasePrice : business.sellingPrice;
 
       // prettier-ignore
-      Cfx.TriggerClientEvent(`${Cfx.Server.GetCurrentResourceName()}:show-dialog`, source,
-                {
-                    title: 'Purchase this business?',
-                    content: `Are you sure you want to purchase this business for $${StringFormatter.numberWithCommas(businessPrice)}?`,
-                    buttons: [{ title: 'Confirm' }],
-                    dialogId: 'purchase_unowned_business',
-                } as UIDialog);
+      Cfx.TriggerClientEvent(`${Cfx.Server.GetCurrentResourceName()}:show-dialog`, Cfx.source,
+        {
+          title: 'Purchase this business?',
+          content: `Are you sure you want to purchase this business for $${StringFormatter.numberWithCommas(businessPrice)}?`,
+          buttons: [{ title: 'Confirm' }],
+          dialogId: 'purchase_unowned_business',
+        } as UIDialog);
     }
   }
 
@@ -330,5 +330,6 @@ export class Server {
       true
     );
     Cfx.Server.SetEntityRoutingBucket(Cfx.Server.GetPlayerPed(source.toString()), business.id);
+    this._virtualWorlds.setPlayerVirtualWorld(source, business.id);
   }
 }
